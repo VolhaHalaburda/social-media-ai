@@ -36,7 +36,7 @@ export default function RootLayout({
               <AppSidebar />
               <main className="flex-1 overflow-auto min-h-screen">
                 <TopBar />
-                <div className="mx-auto max-w-6xl px-6 py-8">{children}</div>
+                <div className="mx-auto max-w-6xl px-6 py-6">{children}</div>
               </main>
             </SidebarProvider>
           </PipelineProvider>

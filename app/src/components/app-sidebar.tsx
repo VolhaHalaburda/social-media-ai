@@ -9,6 +9,7 @@ import {
   SidebarContent,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -39,22 +40,23 @@ export function AppSidebar() {
   }, []);
 
   return (
-    <Sidebar className="border-r border-white/[0.06]">
-      <SidebarHeader className="px-5 py-6">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-purple-500 to-indigo-600 glow-sm">
-            <Film className="h-4 w-4 text-white" />
+    <Sidebar className="border-r border-white/[0.06] bg-[#111113]">
+      <SidebarHeader className="px-4 py-4 border-b border-white/[0.06]">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-6 w-6 items-center justify-center rounded-[6px] bg-[#5e6ad2]">
+            <Film className="h-3.5 w-3.5 text-white" />
           </div>
-          <div>
-            <h1 className="text-sm font-semibold tracking-tight">Virality System</h1>
-            <p className="text-[11px] text-muted-foreground">Instagram Reels AI</p>
-          </div>
+          <span className="text-[13px] font-semibold text-[#e2e2e5] tracking-tight">Virality System</span>
         </div>
       </SidebarHeader>
-      <SidebarContent className="px-3">
+
+      <SidebarContent className="px-2 py-3">
         <SidebarGroup>
+          <SidebarGroupLabel className="px-2 mb-1 text-[11px] font-medium text-[#4a4a55] uppercase tracking-widest">
+            Workspace
+          </SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu>
+            <SidebarMenu className="gap-0.5">
               {navItems.map((item) => {
                 const isActive = pathname === item.href;
                 return (
@@ -62,11 +64,15 @@ export function AppSidebar() {
                     <SidebarMenuButton
                       asChild
                       isActive={isActive}
-                      className="h-10 rounded-xl px-3 transition-all duration-200"
+                      className={`h-8 rounded-[6px] px-2.5 text-[13px] transition-colors duration-100 ${
+                        isActive
+                          ? "bg-white/[0.08] text-[#e2e2e5]"
+                          : "text-[#8a8a96] hover:bg-white/[0.05] hover:text-[#e2e2e5]"
+                      }`}
                     >
-                      <Link href={item.href}>
-                        <item.icon className="h-4 w-4" />
-                        <span className="text-[13px]">{item.title}</span>
+                      <Link href={item.href} className="flex items-center gap-2.5">
+                        <item.icon className={`h-3.5 w-3.5 ${isActive ? "text-[#5e6ad2]" : ""}`} />
+                        <span>{item.title}</span>
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
@@ -76,10 +82,11 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+
       {lastRun && (
-        <SidebarFooter className="px-5 py-4">
-          <p className="text-[11px] text-muted-foreground">
-            Last pipeline: <span className="text-foreground/70">{lastRun}</span>
+        <SidebarFooter className="px-4 py-3 border-t border-white/[0.06]">
+          <p className="text-[11px] text-[#4a4a55]">
+            Last run: <span className="text-[#6e6e7a]">{lastRun}</span>
           </p>
         </SidebarFooter>
       )}

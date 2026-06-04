@@ -90,17 +90,22 @@ function VideosContent() {
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Videos</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Browse analyzed competitor reels with AI insights
-        </p>
+      <div className="flex items-center justify-between border-b border-white/[0.06] pb-4">
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight text-[#e2e2e5]">Videos</h1>
+          <p className="mt-0.5 text-[13px] text-[#6e6e7a]">
+            Browse analyzed competitor reels with AI insights
+          </p>
+        </div>
+        <Badge variant="secondary" className="rounded-md px-2.5 py-1 text-[12px] bg-white/[0.05] border border-white/[0.07] text-[#6e6e7a]">
+          {filtered.length} videos
+        </Badge>
       </div>
 
       {/* Filters & Sort */}
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-2">
         <Select value={filterConfig} onValueChange={setFilterConfig}>
-          <SelectTrigger className="w-[220px] rounded-xl glass border-white/[0.08] h-10">
+          <SelectTrigger className="w-[200px] rounded-md border-white/[0.08] bg-white/[0.04] h-8 text-[13px] text-[#a8a8b3]">
             <SelectValue placeholder="Filter by config" />
           </SelectTrigger>
           <SelectContent>
@@ -112,7 +117,7 @@ function VideosContent() {
         </Select>
 
         <Select value={filterCreator} onValueChange={setFilterCreator}>
-          <SelectTrigger className="w-[200px] rounded-xl glass border-white/[0.08] h-10">
+          <SelectTrigger className="w-[180px] rounded-md border-white/[0.08] bg-white/[0.04] h-8 text-[13px] text-[#a8a8b3]">
             <SelectValue placeholder="Filter by creator" />
           </SelectTrigger>
           <SelectContent>
@@ -124,8 +129,8 @@ function VideosContent() {
         </Select>
 
         <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortOption)}>
-          <SelectTrigger className="w-[180px] rounded-xl glass border-white/[0.08] h-10">
-            <ArrowUpDown className="h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
+          <SelectTrigger className="w-[160px] rounded-md border-white/[0.08] bg-white/[0.04] h-8 text-[13px] text-[#a8a8b3]">
+            <ArrowUpDown className="h-3 w-3 mr-1.5 text-[#6e6e7a]" />
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -135,10 +140,6 @@ function VideosContent() {
             <SelectItem value="starred">Starred First</SelectItem>
           </SelectContent>
         </Select>
-
-        <Badge variant="secondary" className="rounded-lg px-3 py-1.5 text-xs bg-white/[0.05] border border-white/[0.08]">
-          {filtered.length} videos
-        </Badge>
       </div>
 
       {/* Video Grid — Instagram-style */}
