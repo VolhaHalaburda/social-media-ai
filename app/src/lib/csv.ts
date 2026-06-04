@@ -1,19 +1,46 @@
 import { parse } from "csv-parse/sync";
 import { stringify } from "csv-stringify/sync";
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, copyFileSync } from "fs";
 import path from "path";
 import type { Config, Creator, Video } from "./types";
 
-const DATA_DIR = path.join(process.cwd(), "..", "data");
+// On Vercel, the project root is read-only. We write to /tmp instead.
+// On first read we copy the bundled seed file from data/ into /tmp so
+// existing data (committed to the repo) is available after a cold start.
+const IS_VERCEL = process.env.VERCEL === "1";
+const SOURCE_DATA_DIR = path.join(process.cwd(), "..", "data");
+const WRITE_DATA_DIR = IS_VERCEL ? "/tmp/social-media-data" : SOURCE_DATA_DIR;
 
 function ensureDataDir() {
-  if (!existsSync(DATA_DIR)) {
-    mkdirSync(DATA_DIR, { recursive: true });
+  if (!existsSync(WRITE_DATA_DIR)) {
+    mkdirSync(WRITE_DATA_DIR, { recursive: true });
+  }
+}
+
+function resolveReadPath(filename: string): string {
+  const writePath = path.join(WRITE_DATA_DIR, filename);
+  // If a writable copy exists (user has saved data this session) use it
+  if (IS_VERCEL && existsSync(writePath)) return writePath;
+  // Otherwise fall back to the bundled source file
+  const sourcePath = path.join(SOURCE_DATA_DIR, filename);
+  if (existsSync(sourcePath)) return sourcePath;
+  return writePath; // will return [] from readCsv if missing
+}
+
+function seedToTmp(filename: string) {
+  if (!IS_VERCEL) return;
+  const tmpPath = path.join(WRITE_DATA_DIR, filename);
+  if (existsSync(tmpPath)) return; // already seeded this session
+  const sourcePath = path.join(SOURCE_DATA_DIR, filename);
+  ensureDataDir();
+  if (existsSync(sourcePath)) {
+    copyFileSync(sourcePath, tmpPath);
   }
 }
 
 function readCsv<T>(filename: string): T[] {
-  const filepath = path.join(DATA_DIR, filename);
+  seedToTmp(filename);
+  const filepath = resolveReadPath(filename);
   if (!existsSync(filepath)) return [];
   const content = readFileSync(filepath, "utf-8");
   if (!content.trim()) return [];
@@ -22,7 +49,7 @@ function readCsv<T>(filename: string): T[] {
 
 function writeCsv(filename: string, data: Record<string, unknown>[], columns: string[]) {
   ensureDataDir();
-  const filepath = path.join(DATA_DIR, filename);
+  const filepath = path.join(WRITE_DATA_DIR, filename);
   const output = stringify(data, { header: true, columns });
   writeFileSync(filepath, output, "utf-8");
 }
