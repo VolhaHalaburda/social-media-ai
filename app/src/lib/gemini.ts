@@ -67,11 +67,40 @@ async function waitForFileActive(fileName: string, maxWaitMs = 120000): Promise<
   throw new Error(`Gemini file ${fileName} did not become ACTIVE within ${maxWaitMs / 1000}s`);
 }
 
+// Pull Google's suggested retry delay (e.g. "retryDelay": "13s") out of a 429
+// body so we wait exactly as long as the server asks instead of guessing.
+function parseRetryDelayMs(body: string): number | null {
+  try {
+    const json = JSON.parse(body);
+    const details = json?.error?.details;
+    if (Array.isArray(details)) {
+      for (const d of details) {
+        if (typeof d?.retryDelay === "string") {
+          const secs = parseFloat(d.retryDelay.replace("s", ""));
+          if (!Number.isNaN(secs)) return Math.ceil(secs * 1000);
+        }
+      }
+    }
+  } catch {
+    // fall through
+  }
+  // Also handle plain text "Please retry in 13.97s"
+  const m = body.match(/retry in ([\d.]+)s/i);
+  if (m) return Math.ceil(parseFloat(m[1]) * 1000);
+  return null;
+}
+
+// A 429 caused by a hard zero limit (e.g. free-tier limit: 0) can never be
+// satisfied by retrying — detect it so we fail fast with a clear message.
+function isHardZeroLimit(body: string): boolean {
+  return /limit:\s*0\b/.test(body);
+}
+
 export async function analyzeVideo(
   fileUri: string,
   mimeType: string,
   analysisPrompt: string,
-  maxRetries = 3
+  maxRetries = 5
 ): Promise<string> {
   const key = getApiKey();
 
@@ -95,8 +124,21 @@ export async function analyzeVideo(
 
       if (!response.ok) {
         const text = await response.text();
+
+        // No point retrying a structural zero-quota error — surface it clearly.
+        if (response.status === 429 && isHardZeroLimit(text)) {
+          throw new Error(
+            "Gemini quota is 0 for this project — billing is NOT linked to the " +
+              "project that owns your GEMINI_API_KEY. Link billing to that exact " +
+              `project, then retry. Raw: ${text}`
+          );
+        }
+
         if (attempt < maxRetries - 1) {
-          await new Promise((r) => setTimeout(r, 5000));
+          // Respect the server's requested delay; back off exponentially otherwise.
+          const serverDelay = parseRetryDelayMs(text);
+          const backoff = serverDelay ?? Math.min(2 ** attempt * 2000, 30000);
+          await new Promise((r) => setTimeout(r, backoff));
           continue;
         }
         throw new Error(`Gemini analysis error ${response.status}: ${text}`);
@@ -108,8 +150,12 @@ export async function analyzeVideo(
       const hashIndex = text.indexOf("#");
       return hashIndex >= 0 ? text.substring(hashIndex) : text;
     } catch (error) {
+      // Don't swallow the explicit zero-quota diagnostic.
+      if (error instanceof Error && error.message.includes("billing is NOT linked")) {
+        throw error;
+      }
       if (attempt < maxRetries - 1) {
-        await new Promise((r) => setTimeout(r, 5000));
+        await new Promise((r) => setTimeout(r, Math.min(2 ** attempt * 2000, 30000)));
         continue;
       }
       throw error;
