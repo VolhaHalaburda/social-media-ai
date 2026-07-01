@@ -29,7 +29,11 @@ export default function RunPage() {
   const [creators, setCreators] = useState<Creator[]>([]);
   const [selectedConfig, setSelectedConfig] = useState("");
   const [maxVideos, setMaxVideos] = useState(20);
-  const [topK, setTopK] = useState(3);
+  // Default to 1 video per creator so a single run finishes well within
+  // Vercel's function time limit. Raise this in Advanced settings to analyze
+  // more per creator — the pipeline resumes across runs, so higher values
+  // just take a few runs to complete.
+  const [topK, setTopK] = useState(1);
   const [nDays, setNDays] = useState(30);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const logEndRef = useRef<HTMLDivElement>(null);
