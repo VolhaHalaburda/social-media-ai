@@ -1,5 +1,5 @@
 import { v4 as uuid } from "uuid";
-import { readConfigsAsync, readCreatorsAsync, readVideosAsync, writeVideosAsync } from "./csv";
+import { readConfigsAsync, readCreatorsAsync, appendVideoAsync } from "./csv";
 import { scrapeReels } from "./apify";
 import { uploadVideo, analyzeVideo } from "./gemini";
 import { generateNewConcepts } from "./claude";
@@ -155,7 +155,22 @@ export async function runPipeline(
     progress.phase = "analyzing";
     emit();
 
-    const newVideos: Video[] = [];
+    // Persist each video as soon as it's analyzed, instead of batching a
+    // single write at the very end — if this function gets killed partway
+    // through (e.g. a Vercel maxDuration timeout), already-completed videos
+    // must not be lost. Writes are chained through one queue because
+    // appendVideoAsync does a read-modify-write and concurrent workers
+    // would otherwise race and clobber each other's additions.
+    let writeQueue: Promise<void> = Promise.resolve();
+    const persistVideo = (video: Video) => {
+      const task = writeQueue.then(() => appendVideoAsync(video));
+      // If this write fails, don't let the rejection propagate into the
+      // queue itself — that would permanently block every video queued
+      // after it. The failure still surfaces to this video's own caller
+      // via `task`, which is what actually gets awaited below.
+      writeQueue = task.catch(() => {});
+      return task;
+    };
 
     await runWithConcurrency(allTopVideos, VIDEO_CONCURRENCY, async (video) => {
       const taskId = `video-${uuid().slice(0, 8)}`;
@@ -204,7 +219,7 @@ export async function runPipeline(
           starred: false,
         };
 
-        newVideos.push(videoRecord);
+        await persistVideo(videoRecord);
         progress.videosAnalyzed++;
         removeTask(taskId);
         log(`@${video.username} (${label}): done`);
@@ -217,12 +232,6 @@ export async function runPipeline(
         emit();
       }
     });
-
-    // Write all new videos at once
-    if (newVideos.length > 0) {
-      const existing = await readVideosAsync();
-      await writeVideosAsync([...existing, ...newVideos]);
-    }
 
     progress.phase = "done";
     progress.status = "completed";

@@ -75,10 +75,14 @@ export function PipelineProvider({ children }: { children: React.ReactNode }) {
       }
     } catch (err) {
       if ((err as Error).name === "AbortError") return;
+      const message = err instanceof Error ? err.message : "Unknown error";
       setProgress((prev) => ({
         ...(prev || { phase: "done" as const, activeTasks: [], creatorsCompleted: 0, creatorsTotal: 0, creatorsScraped: 0, videosAnalyzed: 0, videosTotal: 0, log: [] }),
         status: "error" as const,
-        errors: [err instanceof Error ? err.message : "Unknown error"],
+        errors: [
+          ...(prev?.errors || []),
+          `Connection dropped (${message}) — likely a server timeout. Already-analyzed videos before this point were saved.`,
+        ],
       }));
     } finally {
       setRunning(false);
