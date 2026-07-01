@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, useRef, useCallback } from "react";
+import { createContext, useContext, useState, useRef, useCallback, useEffect } from "react";
 import type { PipelineProgress } from "@/lib/types";
 
 interface PipelineContextValue {
@@ -11,83 +11,94 @@ interface PipelineContextValue {
 
 const PipelineContext = createContext<PipelineContextValue | null>(null);
 
+const POLL_INTERVAL_MS = 2000;
+const MAX_CONSECUTIVE_POLL_ERRORS = 6;
+
 export function PipelineProvider({ children }: { children: React.ReactNode }) {
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<PipelineProgress | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
+  // Set to false to stop the poll loop (e.g. on unmount).
+  const activeRef = useRef(true);
 
-  const runPipeline = useCallback(async (params: { configName: string; maxVideos: number; topK: number; nDays: number }) => {
-    if (running) return;
-    setRunning(true);
-    setProgress(null);
+  useEffect(() => {
+    activeRef.current = true;
+    return () => {
+      activeRef.current = false;
+    };
+  }, []);
 
-    abortRef.current = new AbortController();
-
-    try {
-      const response = await fetch("/api/pipeline", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(params),
-        signal: abortRef.current.signal,
+  const runPipeline = useCallback(
+    async (params: { configName: string; maxVideos: number; topK: number; nDays: number }) => {
+      if (running) return;
+      setRunning(true);
+      setProgress({
+        status: "running",
+        phase: "scraping",
+        activeTasks: [],
+        creatorsCompleted: 0,
+        creatorsTotal: 0,
+        creatorsScraped: 0,
+        videosAnalyzed: 0,
+        videosTotal: 0,
+        errors: [],
+        log: ["Starting pipeline…"],
       });
 
-      const reader = response.body?.getReader();
-      if (!reader) return;
-
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let lastProgress: PipelineProgress | null = null;
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            try {
-              const data = JSON.parse(line.slice(6));
-              lastProgress = data;
-              setProgress(data);
-            } catch {
-              // skip
-            }
-          }
-        }
-      }
-
-      // The stream can end (e.g. Vercel killing the function at maxDuration)
-      // without ever sending a "completed"/"error" event. Without this, the
-      // UI is left frozen on the last progress snapshot with no indication
-      // anything went wrong.
-      if (lastProgress && lastProgress.status === "running") {
-        setProgress({
-          ...lastProgress,
-          status: "error",
-          errors: [
-            ...lastProgress.errors,
-            "Connection to the pipeline was lost before it finished (likely a server timeout). Some videos may not have been saved.",
-          ],
+      try {
+        const startRes = await fetch("/api/pipeline/start", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(params),
         });
+        if (!startRes.ok) throw new Error(`Failed to start pipeline (${startRes.status})`);
+        const { jobId } = (await startRes.json()) as { jobId: string };
+
+        // Poll the job until it finishes. Work continues server-side across
+        // many invocations regardless of this page — polling just observes it.
+        let pollErrors = 0;
+        while (activeRef.current) {
+          await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+          if (!activeRef.current) break;
+
+          let data: PipelineProgress;
+          try {
+            const res = await fetch(`/api/pipeline/status?jobId=${jobId}`, { cache: "no-store" });
+            if (!res.ok) throw new Error(`status ${res.status}`);
+            data = (await res.json()) as PipelineProgress;
+            pollErrors = 0;
+          } catch {
+            // Tolerate transient blips (a worker invocation briefly saturating
+            // the function, a dropped request) before declaring failure.
+            if (++pollErrors >= MAX_CONSECUTIVE_POLL_ERRORS) {
+              throw new Error("Lost contact with the pipeline while polling for progress.");
+            }
+            continue;
+          }
+
+          setProgress(data);
+          if (data.status === "completed" || data.status === "error") break;
+        }
+      } catch (err) {
+        setProgress((prev) => ({
+          ...(prev || {
+            phase: "done" as const,
+            activeTasks: [],
+            creatorsCompleted: 0,
+            creatorsTotal: 0,
+            creatorsScraped: 0,
+            videosAnalyzed: 0,
+            videosTotal: 0,
+            log: [],
+          }),
+          status: "error" as const,
+          errors: [...(prev?.errors || []), err instanceof Error ? err.message : "Unknown error"],
+        }));
+      } finally {
+        setRunning(false);
       }
-    } catch (err) {
-      if ((err as Error).name === "AbortError") return;
-      const message = err instanceof Error ? err.message : "Unknown error";
-      setProgress((prev) => ({
-        ...(prev || { phase: "done" as const, activeTasks: [], creatorsCompleted: 0, creatorsTotal: 0, creatorsScraped: 0, videosAnalyzed: 0, videosTotal: 0, log: [] }),
-        status: "error" as const,
-        errors: [
-          ...(prev?.errors || []),
-          `Connection dropped (${message}) — likely a server timeout. Already-analyzed videos before this point were saved.`,
-        ],
-      }));
-    } finally {
-      setRunning(false);
-    }
-  }, [running]);
+    },
+    [running]
+  );
 
   return (
     <PipelineContext.Provider value={{ running, progress, runPipeline }}>

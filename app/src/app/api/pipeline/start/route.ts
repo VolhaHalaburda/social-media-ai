@@ -1,0 +1,20 @@
+import { NextResponse, after } from "next/server";
+import { initJob, runScrapePhase } from "@/lib/jobs";
+import { baseUrlFromRequest } from "@/lib/request-url";
+import type { PipelineParams } from "@/lib/types";
+
+export const maxDuration = 300;
+export const dynamic = "force-dynamic";
+
+// Kicks off a pipeline run and returns a jobId immediately. The scrape phase
+// (and everything after) runs in the background via `after()`, so the client
+// gets an id to poll right away instead of holding a long request open.
+export async function POST(req: Request) {
+  const params = (await req.json()) as PipelineParams;
+  const base = baseUrlFromRequest(req);
+
+  const job = await initJob(params);
+  after(() => runScrapePhase(job, base));
+
+  return NextResponse.json({ jobId: job.id });
+}
