@@ -1,6 +1,6 @@
 import { parse } from "csv-parse/sync";
 import { stringify } from "csv-stringify/sync";
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync } from "fs";
 import path from "path";
 import type { Config, Creator, Video } from "./types";
 
@@ -170,4 +170,80 @@ export function appendVideo(video: Video) {
   const videos = readVideos();
   videos.push(video);
   writeVideos(videos);
+}
+
+// ---- Storage health check ---------------------------------------------------
+
+export interface StorageHealth {
+  storageMode: "vercel-kv" | "local-csv";
+  kvEnvConfigured: boolean;
+  writable: boolean;
+  roundTripOk: boolean;
+  detail: string;
+}
+
+// Performs a real write -> read -> delete round-trip against whichever backend
+// is active, so we can tell definitively (not by guessing) whether the
+// deployment actually has durable, writable storage. This is the prerequisite
+// for both reliable persistence and any background-job pipeline.
+export async function storageHealthCheck(): Promise<StorageHealth> {
+  const token = `hc-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+  if (IS_VERCEL) {
+    try {
+      const { kv } = await import("@vercel/kv");
+      const key = `__healthcheck__:${token}`;
+      await kv.set(key, [token]);
+      const read = await kv.get<string[]>(key);
+      await kv.del(key);
+      const roundTripOk = Array.isArray(read) && read[0] === token;
+      return {
+        storageMode: "vercel-kv",
+        kvEnvConfigured: true,
+        writable: true,
+        roundTripOk,
+        detail: roundTripOk
+          ? "Vercel KV write/read/delete succeeded — persistence is working."
+          : "KV is reachable but the value read back did not match what was written.",
+      };
+    } catch (err) {
+      return {
+        storageMode: "vercel-kv",
+        kvEnvConfigured: true,
+        writable: false,
+        roundTripOk: false,
+        detail: `KV is configured but the round-trip failed: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+  }
+
+  // Local / no-KV path: prove the data dir is actually writable.
+  try {
+    const filename = `__healthcheck__-${token}.csv`;
+    writeCsvSync(filename, [{ token }], ["token"]);
+    const read = readCsvSync<{ token: string }>(filename);
+    const filepath = path.join(DATA_DIR, filename);
+    if (existsSync(filepath)) rmSync(filepath);
+    const roundTripOk = read[0]?.token === token;
+    return {
+      storageMode: "local-csv",
+      kvEnvConfigured: false,
+      writable: true,
+      roundTripOk,
+      detail: roundTripOk
+        ? "Local CSV write/read/delete succeeded (fine for local dev, NOT durable on Vercel)."
+        : "Wrote a file but read back the wrong value.",
+    };
+  } catch (err) {
+    return {
+      storageMode: "local-csv",
+      kvEnvConfigured: false,
+      writable: false,
+      roundTripOk: false,
+      detail:
+        "No KV is configured AND the filesystem is not writable — writes are failing " +
+        `silently in this environment. This is almost certainly why data does not persist. ` +
+        `Raw: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
 }
