@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/select";
 import { Play, Loader2, CheckCircle2, XCircle, Terminal, Zap, ChevronDown, ArrowRight, Film, AlertTriangle } from "lucide-react";
 import { usePipeline } from "@/context/pipeline-context";
-import type { Config } from "@/lib/types";
+import type { Config, Creator } from "@/lib/types";
 
 function formatViews(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
@@ -26,6 +26,7 @@ function formatViews(n: number): string {
 
 export default function RunPage() {
   const [configs, setConfigs] = useState<Config[]>([]);
+  const [creators, setCreators] = useState<Creator[]>([]);
   const [selectedConfig, setSelectedConfig] = useState("");
   const [maxVideos, setMaxVideos] = useState(20);
   const [topK, setTopK] = useState(3);
@@ -37,7 +38,11 @@ export default function RunPage() {
 
   useEffect(() => {
     fetch("/api/configs").then((r) => r.json()).then(setConfigs);
+    fetch("/api/creators").then((r) => r.json()).then(setCreators);
   }, []);
+
+  const activeCategories = new Set(creators.map((c) => c.category));
+  const runnableConfigs = configs.filter((c) => activeCategories.has(c.creatorsCategory));
 
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -78,11 +83,17 @@ export default function RunPage() {
                 <SelectValue placeholder="Select a config..." />
               </SelectTrigger>
               <SelectContent>
-                {configs.map((c) => (
+                {runnableConfigs.map((c) => (
                   <SelectItem key={c.id} value={c.configName}>{c.configName}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            {configs.length > runnableConfigs.length && (
+              <p className="mt-1.5 text-[11px] text-muted-foreground">
+                {configs.length - runnableConfigs.length} config(s) hidden — their creator category has no active creators.
+                Delete them on the <Link href="/configs" className="text-purple-400 hover:text-purple-300">Configs page</Link> if no longer needed.
+              </p>
+            )}
           </div>
 
           <button
