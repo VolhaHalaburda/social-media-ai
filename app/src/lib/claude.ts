@@ -14,13 +14,17 @@ export async function generateNewConcepts(
 
   const client = new Anthropic({ apiKey });
 
-  const message = await client.messages.create({
-    model: "claude-sonnet-4-5-20250929",
-    max_tokens: 4096,
-    messages: [
-      {
-        role: "user",
-        content: `# ROLE
+  // Bound this explicitly — the SDK's default is 10 minutes with silent
+  // automatic retries, which can hang well past this route's 5-minute
+  // Vercel maxDuration with zero visibility into what's happening.
+  const message = await client.messages.create(
+    {
+      model: "claude-sonnet-4-5-20250929",
+      max_tokens: 4096,
+      messages: [
+        {
+          role: "user",
+          content: `# ROLE
 You're an expert in creating viral Reels on Instagram.
 
 # OBJECTIVE
@@ -37,9 +41,11 @@ ${newConceptsPrompt}
 ------
 
 # BEGIN YOUR WORK`,
-      },
-    ],
-  });
+        },
+      ],
+    },
+    { timeout: 45_000, maxRetries: 2 }
+  );
 
   const block = message.content[0];
   return block.type === "text" ? block.text : "";

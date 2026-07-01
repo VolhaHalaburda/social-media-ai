@@ -36,6 +36,7 @@ export function PipelineProvider({ children }: { children: React.ReactNode }) {
 
       const decoder = new TextDecoder();
       let buffer = "";
+      let lastProgress: PipelineProgress | null = null;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -49,12 +50,28 @@ export function PipelineProvider({ children }: { children: React.ReactNode }) {
           if (line.startsWith("data: ")) {
             try {
               const data = JSON.parse(line.slice(6));
+              lastProgress = data;
               setProgress(data);
             } catch {
               // skip
             }
           }
         }
+      }
+
+      // The stream can end (e.g. Vercel killing the function at maxDuration)
+      // without ever sending a "completed"/"error" event. Without this, the
+      // UI is left frozen on the last progress snapshot with no indication
+      // anything went wrong.
+      if (lastProgress && lastProgress.status === "running") {
+        setProgress({
+          ...lastProgress,
+          status: "error",
+          errors: [
+            ...lastProgress.errors,
+            "Connection to the pipeline was lost before it finished (likely a server timeout). Some videos may not have been saved.",
+          ],
+        });
       }
     } catch (err) {
       if ((err as Error).name === "AbortError") return;
