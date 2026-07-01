@@ -1,5 +1,5 @@
 import { v4 as uuid } from "uuid";
-import { readConfigsAsync, readCreatorsAsync, appendVideoAsync } from "./csv";
+import { readConfigsAsync, readCreatorsAsync, readVideosAsync, appendVideoAsync } from "./csv";
 import { scrapeReels } from "./apify";
 import { uploadVideo, analyzeVideo } from "./gemini";
 import { generateNewConcepts } from "./claude";
@@ -147,8 +147,26 @@ export async function runPipeline(
       }
     }
 
-    progress.videosTotal = allTopVideos.length;
-    log(`Scraping done. ${allTopVideos.length} videos to analyze (${VIDEO_CONCURRENCY} workers)`);
+    // Resume support: skip any video already saved under this config, so a
+    // run that was cut short (e.g. Vercel maxDuration timeout) makes real
+    // forward progress instead of restarting from zero every time. Combined
+    // with per-video persistence below, running the pipeline again picks up
+    // where the last one died. Key on link+config because the same reel can
+    // legitimately be analyzed under different configs.
+    const existingVideos = await readVideosAsync();
+    const doneKeys = new Set(
+      existingVideos
+        .filter((v) => v.configName === params.configName)
+        .map((v) => v.link)
+    );
+    const alreadyDone = allTopVideos.filter((v) => doneKeys.has(v.postUrl)).length;
+    const pendingVideos = allTopVideos.filter((v) => !doneKeys.has(v.postUrl));
+    if (alreadyDone > 0) {
+      log(`Skipping ${alreadyDone} video(s) already analyzed for this config`);
+    }
+
+    progress.videosTotal = pendingVideos.length;
+    log(`Scraping done. ${pendingVideos.length} videos to analyze (${VIDEO_CONCURRENCY} workers)`);
     emit();
 
     // Phase 2: Process videos concurrently
@@ -172,7 +190,7 @@ export async function runPipeline(
       return task;
     };
 
-    await runWithConcurrency(allTopVideos, VIDEO_CONCURRENCY, async (video) => {
+    await runWithConcurrency(pendingVideos, VIDEO_CONCURRENCY, async (video) => {
       const taskId = `video-${uuid().slice(0, 8)}`;
       const label = `${video.views.toLocaleString()} views`;
 
