@@ -14,10 +14,12 @@ export async function generateNewConcepts(
 
   const client = new Anthropic({ apiKey });
 
-  // Bound this explicitly — the SDK's default is 10 minutes with silent
-  // automatic retries, which can hang well past this route's 5-minute
-  // Vercel maxDuration with zero visibility into what's happening.
-  const message = await client.messages.create(
+  // Stream the response: generating 3 full concepts takes 60-90+ seconds,
+  // which a single blocking request can't tolerate (a flat 45s timeout here
+  // previously made every generation fail). With streaming the timeout only
+  // bounds time-to-first-token and stall gaps, not total generation time.
+  // The worker route allows 300s, so 240s is a safe overall ceiling.
+  const stream = client.messages.stream(
     {
       model: "claude-sonnet-4-5-20250929",
       max_tokens: 4096,
@@ -44,9 +46,12 @@ ${newConceptsPrompt}
         },
       ],
     },
-    { timeout: 45_000, maxRetries: 2 }
+    { timeout: 240_000, maxRetries: 2 }
   );
 
-  const block = message.content[0];
-  return block.type === "text" ? block.text : "";
+  const message = await stream.finalMessage();
+  return message.content
+    .filter((block) => block.type === "text")
+    .map((block) => block.text)
+    .join("");
 }
