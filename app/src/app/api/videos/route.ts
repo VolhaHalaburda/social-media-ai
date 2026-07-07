@@ -1,12 +1,15 @@
 import { NextResponse } from "next/server";
-import { readVideosAsync, writeVideosAsync } from "@/lib/csv";
+import { readCreatorsAsync, readVideosAsync, writeVideosAsync } from "@/lib/csv";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const configName = searchParams.get("configName");
   const creator = searchParams.get("creator");
 
-  let videos = await readVideosAsync();
+  // Only show videos from creators that are still tracked — results of
+  // deleted creators must not linger in the Videos tab.
+  const tracked = new Set((await readCreatorsAsync()).map((c) => c.username.toLowerCase()));
+  let videos = (await readVideosAsync()).filter((v) => tracked.has(v.creator.toLowerCase()));
 
   if (configName) videos = videos.filter((v) => v.configName === configName);
   if (creator) videos = videos.filter((v) => v.creator === creator);

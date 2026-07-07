@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { v4 as uuid } from "uuid";
-import { readCreatorsAsync, writeCreatorsAsync } from "@/lib/csv";
+import { readCreatorsAsync, writeCreatorsAsync, readVideosAsync, writeVideosAsync } from "@/lib/csv";
 import { scrapeCreatorStats } from "@/lib/apify";
 import type { Creator } from "@/lib/types";
 
@@ -68,6 +68,17 @@ export async function DELETE(request: Request) {
   const id = searchParams.get("id");
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
   const creators = await readCreatorsAsync();
+  const removed = creators.find((c) => c.id === id);
   await writeCreatorsAsync(creators.filter((c) => c.id !== id));
+
+  // Forget this creator's analyzed videos along with the creator.
+  if (removed) {
+    const videos = await readVideosAsync();
+    const remaining = videos.filter(
+      (v) => v.creator.toLowerCase() !== removed.username.toLowerCase()
+    );
+    if (remaining.length !== videos.length) await writeVideosAsync(remaining);
+  }
+
   return NextResponse.json({ success: true });
 }
