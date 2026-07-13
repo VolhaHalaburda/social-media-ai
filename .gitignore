@@ -6,3 +6,5 @@ outputs/
 # Never commit user accounts (contains password hashes) or the usage log
 data/users.csv
 data/runs.csv
+.vercel
+.env*
