@@ -65,6 +65,29 @@ export default function CreatorsPage() {
     setDialogOpen(true);
   };
 
+  // The POST returns as soon as the creator is saved; profile stats are
+  // scraped in the background. Poll until they land (give up after ~1 min).
+  const pollForStats = (id: string, attempt = 0) => {
+    if (attempt >= 15) {
+      setRefreshingId((cur) => (cur === id ? null : cur));
+      return;
+    }
+    setTimeout(async () => {
+      try {
+        const list: Creator[] = await fetch("/api/creators").then((r) => r.json());
+        setCreators(list);
+        const c = list.find((x) => x.id === id);
+        if (!c || c.lastScrapedAt) {
+          setRefreshingId((cur) => (cur === id ? null : cur));
+        } else {
+          pollForStats(id, attempt + 1);
+        }
+      } catch {
+        pollForStats(id, attempt + 1);
+      }
+    }, 4000);
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -75,11 +98,16 @@ export default function CreatorsPage() {
           body: JSON.stringify({ id: editing.id, ...form }),
         });
       } else {
-        await fetch("/api/creators", {
+        const res = await fetch("/api/creators", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(form),
         });
+        if (res.ok) {
+          const created: Creator = await res.json();
+          setRefreshingId(created.id);
+          pollForStats(created.id);
+        }
       }
       setDialogOpen(false);
       loadCreators();
@@ -226,7 +254,7 @@ export default function CreatorsPage() {
                   {saving ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      {editing ? "Saving..." : "Adding & scraping..."}
+                      {editing ? "Saving..." : "Adding..."}
                     </>
                   ) : (
                     editing ? "Save Changes" : "Add Creator"

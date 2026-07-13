@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { requireRole } from "@/lib/auth";
 import { v4 as uuid } from "uuid";
 import { readCreatorsAsync, writeCreatorsAsync, readVideosAsync, writeVideosAsync } from "@/lib/csv";
@@ -34,11 +34,14 @@ export async function POST(request: Request) {
   creators.push(newCreator);
   await writeCreatorsAsync(creators);
 
-  try {
-    const stats = await scrapeCreatorStats(body.username);
-    const updated = await readCreatorsAsync();
-    const idx = updated.findIndex((c) => c.id === newCreator.id);
-    if (idx !== -1) {
+  // Scrape profile stats AFTER responding, so the card shows up instantly.
+  // The client polls until lastScrapedAt lands.
+  after(async () => {
+    try {
+      const stats = await scrapeCreatorStats(body.username);
+      const updated = await readCreatorsAsync();
+      const idx = updated.findIndex((c) => c.id === newCreator.id);
+      if (idx === -1) return; // deleted while scraping
       updated[idx] = {
         ...updated[idx],
         profilePicUrl: stats.profilePicUrl,
@@ -48,11 +51,10 @@ export async function POST(request: Request) {
         lastScrapedAt: new Date().toISOString(),
       };
       await writeCreatorsAsync(updated);
-      return NextResponse.json(updated[idx], { status: 201 });
+    } catch (err) {
+      console.error(`Failed to scrape stats for @${body.username}:`, err);
     }
-  } catch (err) {
-    console.error(`Failed to scrape stats for @${body.username}:`, err);
-  }
+  });
 
   return NextResponse.json(newCreator, { status: 201 });
 }
