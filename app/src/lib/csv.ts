@@ -2,7 +2,7 @@ import { parse } from "csv-parse/sync";
 import { stringify } from "csv-stringify/sync";
 import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync } from "fs";
 import path from "path";
-import type { Config, Creator, Video } from "./types";
+import type { Config, Creator, RunRecord, User, Video } from "./types";
 
 // ---------------------------------------------------------------------------
 // Storage strategy:
@@ -170,6 +170,72 @@ export function appendVideo(video: Video) {
   const videos = readVideos();
   videos.push(video);
   writeVideos(videos);
+}
+
+// ---- Users --------------------------------------------------------------------
+
+const USER_COLUMNS = ["id", "email", "name", "role", "passwordHash", "createdAt"];
+
+export async function readUsersAsync(): Promise<User[]> {
+  if (IS_VERCEL) {
+    return (await kvGet<User>("users")) ?? [];
+  }
+  return readCsvSync<User>("users.csv");
+}
+
+export async function writeUsersAsync(users: User[]): Promise<void> {
+  if (IS_VERCEL) {
+    await kvSet("users", users);
+  } else {
+    writeCsvSync("users.csv", users as unknown as Record<string, unknown>[], USER_COLUMNS);
+  }
+}
+
+// ---- Pipeline runs (usage log) -----------------------------------------------
+
+const RUN_COLUMNS = ["id", "configName", "startedBy", "startedAt", "status", "videosAnalyzed", "videosTotal"];
+const RUNS_CAP = 500;
+
+function parseRuns(raw: Record<string, string>[]): RunRecord[] {
+  return raw.map((r) => ({
+    id: r.id || "",
+    configName: r.configName || "",
+    startedBy: r.startedBy || "",
+    startedAt: r.startedAt || "",
+    status: (r.status as RunRecord["status"]) || "completed",
+    videosAnalyzed: parseInt(r.videosAnalyzed || "0", 10) || 0,
+    videosTotal: parseInt(r.videosTotal || "0", 10) || 0,
+  }));
+}
+
+export async function readRunsAsync(): Promise<RunRecord[]> {
+  if (IS_VERCEL) {
+    return (await kvGet<RunRecord>("runs")) ?? [];
+  }
+  return parseRuns(readCsvSync<Record<string, string>>("runs.csv"));
+}
+
+export async function writeRunsAsync(runs: RunRecord[]): Promise<void> {
+  const capped = runs.slice(-RUNS_CAP);
+  if (IS_VERCEL) {
+    await kvSet("runs", capped);
+  } else {
+    writeCsvSync("runs.csv", capped as unknown as Record<string, unknown>[], RUN_COLUMNS);
+  }
+}
+
+export async function appendRunAsync(run: RunRecord): Promise<void> {
+  const runs = await readRunsAsync();
+  runs.push(run);
+  await writeRunsAsync(runs);
+}
+
+export async function updateRunAsync(id: string, patch: Partial<RunRecord>): Promise<void> {
+  const runs = await readRunsAsync();
+  const idx = runs.findIndex((r) => r.id === id);
+  if (idx === -1) return;
+  runs[idx] = { ...runs[idx], ...patch };
+  await writeRunsAsync(runs);
 }
 
 // ---- Storage health check ---------------------------------------------------

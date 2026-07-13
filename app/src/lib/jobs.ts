@@ -1,5 +1,6 @@
 import { v4 as uuid } from "uuid";
-import { appendVideoAsync } from "./csv";
+import { appendVideoAsync, appendRunAsync, updateRunAsync } from "./csv";
+import { INTERNAL_TOKEN_HEADER, internalToken } from "./session";
 import { scrapeAndBuildPending, analyzeVideoToRecord, type ScrapedVideo } from "./pipeline-steps";
 import type { ActiveTask, Config, PipelineParams, PipelineProgress } from "./types";
 
@@ -23,6 +24,7 @@ export interface PipelineJob {
   id: string;
   status: "running" | "completed" | "error";
   phase: "scraping" | "analyzing" | "done";
+  startedBy: string; // email of the user who triggered the run
   configName: string;
   params: PipelineParams;
   config: Config | null;
@@ -72,7 +74,11 @@ async function triggerWorker(base: string, jobId: string): Promise<void> {
   try {
     await fetch(`${base}/api/pipeline/worker`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        // Machine auth: worker invocations carry no user cookie.
+        [INTERNAL_TOKEN_HEADER]: await internalToken(),
+      },
       body: JSON.stringify({ jobId }),
     });
   } catch {
@@ -86,12 +92,13 @@ async function triggerWorker(base: string, jobId: string): Promise<void> {
 // Create the job shell and persist it, so the caller has an id to return to the
 // client immediately. Scraping (which can take some seconds) runs afterwards in
 // runScrapePhase, off the request's critical path.
-export async function initJob(params: PipelineParams): Promise<PipelineJob> {
+export async function initJob(params: PipelineParams, startedBy: string): Promise<PipelineJob> {
   const now = new Date().toISOString();
   const job: PipelineJob = {
     id: uuid(),
     status: "running",
     phase: "scraping",
+    startedBy,
     configName: params.configName,
     params,
     config: null,
@@ -108,7 +115,31 @@ export async function initJob(params: PipelineParams): Promise<PipelineJob> {
   };
   pushLog(job, `Loading config "${params.configName}" and scraping creators…`);
   await putJob(job);
+  // Usage log entry — attributes this run (and its API spend) to a user.
+  await appendRunAsync({
+    id: job.id,
+    configName: params.configName,
+    startedBy,
+    startedAt: now,
+    status: "running",
+    videosAnalyzed: 0,
+    videosTotal: 0,
+  });
   return job;
+}
+
+// Persist the job's terminal state onto its usage-log entry. Best-effort: a
+// failure to update the log must never fail the pipeline itself.
+async function finalizeRun(job: PipelineJob): Promise<void> {
+  try {
+    await updateRunAsync(job.id, {
+      status: job.status === "running" ? "completed" : job.status,
+      videosAnalyzed: job.videosAnalyzed,
+      videosTotal: job.videosTotal,
+    });
+  } catch {
+    // ignore
+  }
 }
 
 // Phase 1: scrape + build the pending list, then kick off the first worker (or
@@ -128,6 +159,7 @@ export async function runScrapePhase(job: PipelineJob, base: string): Promise<vo
       job.status = "completed";
       pushLog(job, "Nothing to analyze — everything for this config is already done.");
       await putJob(job);
+      await finalizeRun(job);
       return;
     }
 
@@ -141,6 +173,7 @@ export async function runScrapePhase(job: PipelineJob, base: string): Promise<vo
     job.errors.push(`Pipeline error: ${err instanceof Error ? err.message : err}`);
     pushLog(job, `Pipeline error: ${err instanceof Error ? err.message : err}`);
     await putJob(job);
+    await finalizeRun(job);
   }
 }
 
@@ -157,6 +190,7 @@ export async function advanceJob(jobId: string, base: string): Promise<void> {
     job.activeTask = null;
     pushLog(job, `Pipeline complete! ${job.videosAnalyzed}/${job.videosTotal} analyzed, ${job.errors.length} error(s).`);
     await putJob(job);
+    await finalizeRun(job);
     return;
   }
 
@@ -189,6 +223,7 @@ export async function advanceJob(jobId: string, base: string): Promise<void> {
     job.status = "completed";
     pushLog(job, `Pipeline complete! ${job.videosAnalyzed}/${job.videosTotal} analyzed, ${job.errors.length} error(s).`);
     await putJob(job);
+    await finalizeRun(job);
     return;
   }
 

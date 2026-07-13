@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
+import { requireRole } from "@/lib/auth";
 import { readCreatorsAsync, writeCreatorsAsync } from "@/lib/csv";
 import { scrapeCreatorStats } from "@/lib/apify";
 
 export const maxDuration = 300;
 
 export async function POST(request: Request) {
+  const auth = await requireRole("admin");
+  if (auth instanceof NextResponse) return auth;
+
   const body = await request.json();
   const ids: string[] = body.ids || [];
 

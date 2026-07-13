@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireRole } from "@/lib/auth";
 import { v4 as uuid } from "uuid";
 import { readCreatorsAsync, writeCreatorsAsync, readVideosAsync, writeVideosAsync } from "@/lib/csv";
 import { scrapeCreatorStats } from "@/lib/apify";
@@ -13,6 +14,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const auth = await requireRole("admin");
+  if (auth instanceof NextResponse) return auth;
+
   const body = await request.json();
   const creators = await readCreatorsAsync();
 
@@ -54,6 +58,9 @@ export async function POST(request: Request) {
 }
 
 export async function PUT(request: Request) {
+  const auth = await requireRole("admin");
+  if (auth instanceof NextResponse) return auth;
+
   const body = await request.json();
   const creators = await readCreatorsAsync();
   const index = creators.findIndex((c) => c.id === body.id);
@@ -64,6 +71,9 @@ export async function PUT(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const auth = await requireRole("admin");
+  if (auth instanceof NextResponse) return auth;
+
   const { searchParams } = new URL(request.url);
   const id = searchParams.get("id");
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });

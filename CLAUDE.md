@@ -23,6 +23,9 @@ npm run dev
 - `APIFY_API_TOKEN` — Apify Instagram scraper
 - `GEMINI_API_KEY` — Google Gemini video analysis
 - `ANTHROPIC_API_KEY` — Claude concept generation
+- `AUTH_SECRET` — signs session cookies + the internal pipeline-worker token (`openssl rand -hex 32`)
+
+On first visit with no users, `/login` shows a "create admin account" form; that account then invites others from the Team page.
 
 ---
 
@@ -53,6 +56,20 @@ npm run dev
 
 - **Analysis Instruction** — How Gemini should break down the video
 - **New Concepts Instruction** — How Claude should adapt the reference for the brand
+
+---
+
+## Auth & Roles
+
+Self-contained session auth — no external provider:
+
+- **Sessions**: HMAC-SHA256-signed cookie (`vs_session`, httpOnly, 7 days), signed/verified with Web Crypto in `src/lib/session.ts` so it works in both the edge proxy and Node routes. Secret: `AUTH_SECRET`.
+- **Users**: stored via the same storage layer as everything else (`data/users.csv` locally, KV `users` on Vercel), scrypt password hashes. `data/users.csv` and `data/runs.csv` are gitignored.
+- **Gate**: `src/proxy.ts` (Next 16 middleware) redirects unauthenticated pages to `/login` and 401s APIs. Mutating routes re-check the user store via `requireUser`/`requireRole` in `src/lib/auth.ts`.
+- **Roles**: `admin` (run pipeline, edit configs/creators, manage users on `/team`) and `editor` (browse videos/analysis/concepts, star videos; read-only configs/creators). Enforced server-side; UI hides what the role can't do (`useSession` from `src/context/session-context.tsx`).
+- **Worker chain**: `/api/pipeline/worker` is exempt from cookie auth; it requires `x-internal-token` (HMAC derived from `AUTH_SECRET`) sent by `triggerWorker`.
+- **Usage log**: every pipeline run is recorded (`data/runs.csv` / KV `runs`) with the email of the admin who started it; shown on `/team`.
+- **First run**: with zero users, `/login` becomes a create-admin-account form (`/api/auth/setup`), then locks.
 
 ---
 
@@ -100,6 +117,8 @@ npm run dev
 | Run Pipeline | `/run` | Select config, set params, run with live progress streaming |
 | Configs | `/configs` | CRUD for pipeline configs (prompts, categories) |
 | Creators | `/creators` | CRUD for competitor Instagram accounts |
+| Team | `/team` | Admin-only: user management + pipeline usage log |
+| Login | `/login` | Sign in (or first-run admin setup) |
 
 ---
 

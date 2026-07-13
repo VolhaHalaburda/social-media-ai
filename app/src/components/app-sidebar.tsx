@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Film, Play, Users, Settings2 } from "lucide-react";
+import { Film, Play, Users, Settings2, UserCog, LogOut } from "lucide-react";
+import { useSession } from "@/context/session-context";
 import {
   Sidebar,
   SidebarContent,
@@ -19,13 +20,15 @@ import {
 
 const navItems = [
   { title: "Videos", href: "/videos", icon: Film },
-  { title: "Run Pipeline", href: "/run", icon: Play },
+  { title: "Run Pipeline", href: "/run", icon: Play, adminOnly: true },
   { title: "Creators", href: "/creators", icon: Users },
   { title: "Configs", href: "/configs", icon: Settings2 },
+  { title: "Team", href: "/team", icon: UserCog, adminOnly: true },
 ];
 
 export function AppSidebar() {
   const pathname = usePathname();
+  const { user, isAdmin, signOut } = useSession();
   const [lastRun, setLastRun] = useState<string | null>(null);
 
   useEffect(() => {
@@ -38,6 +41,8 @@ export function AppSidebar() {
       })
       .catch(() => {});
   }, []);
+
+  const visibleItems = navItems.filter((item) => !item.adminOnly || isAdmin);
 
   return (
     <Sidebar className="border-r border-white/[0.06] bg-[#111113]">
@@ -57,7 +62,7 @@ export function AppSidebar() {
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu className="gap-0.5">
-              {navItems.map((item) => {
+              {visibleItems.map((item) => {
                 const isActive = pathname === item.href;
                 return (
                   <SidebarMenuItem key={item.href}>
@@ -83,13 +88,28 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
 
-      {lastRun && (
-        <SidebarFooter className="px-4 py-3 border-t border-white/[0.06]">
-          <p className="text-[11px] text-[#4a4a55]">
+      <SidebarFooter className="px-3 py-3 border-t border-white/[0.06] gap-2">
+        {lastRun && (
+          <p className="px-1 text-[11px] text-[#4a4a55]">
             Last run: <span className="text-[#6e6e7a]">{lastRun}</span>
           </p>
-        </SidebarFooter>
-      )}
+        )}
+        {user && (
+          <div className="flex items-center justify-between gap-2 rounded-[6px] bg-white/[0.03] px-2.5 py-2">
+            <div className="min-w-0">
+              <p className="truncate text-[12px] font-medium text-[#e2e2e5]">{user.name}</p>
+              <p className="text-[10.5px] uppercase tracking-wider text-[#5e6ad2]">{user.role}</p>
+            </div>
+            <button
+              onClick={() => void signOut()}
+              title="Sign out"
+              className="shrink-0 rounded-[5px] p-1.5 text-[#6e6e7a] transition-colors hover:bg-white/[0.06] hover:text-[#e2e2e5]"
+            >
+              <LogOut className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+      </SidebarFooter>
     </Sidebar>
   );
 }

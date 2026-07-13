@@ -9,6 +9,7 @@ const pageTitles: Record<string, string> = {
   "/run": "Run Pipeline",
   "/creators": "Creators",
   "/configs": "Configs",
+  "/team": "Team",
 };
 
 export function TopBar() {

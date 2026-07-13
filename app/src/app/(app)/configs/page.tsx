@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Pencil, Trash2, Settings2, Sparkles, Search, Users, Film } from "lucide-react";
+import { useSession } from "@/context/session-context";
 import type { Config, Creator, Video } from "@/lib/types";
 
 const emptyConfig = {
@@ -24,6 +25,7 @@ const emptyConfig = {
 };
 
 export default function ConfigsPage() {
+  const { isAdmin } = useSession();
   const [configs, setConfigs] = useState<Config[]>([]);
   const [creators, setCreators] = useState<Creator[]>([]);
   const [videos, setVideos] = useState<Video[]>([]);
@@ -92,12 +94,14 @@ export default function ConfigsPage() {
           </p>
         </div>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={openNew} className="rounded-xl bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 border-0 gap-1.5">
-              <Plus className="h-4 w-4" />
-              New Config
-            </Button>
-          </DialogTrigger>
+          {isAdmin && (
+            <DialogTrigger asChild>
+              <Button onClick={openNew} className="rounded-xl bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 border-0 gap-1.5">
+                <Plus className="h-4 w-4" />
+                New Config
+              </Button>
+            </DialogTrigger>
+          )}
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto glass-strong rounded-2xl border-white/[0.08]">
             <DialogHeader>
               <DialogTitle>{editing ? "Edit Config" : "New Config"}</DialogTitle>
@@ -188,24 +192,26 @@ export default function ConfigsPage() {
                     </div>
                   </div>
                 </div>
-                <div className="flex gap-1.5">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => openEdit(config)}
-                    className="h-8 w-8 p-0 rounded-lg text-muted-foreground hover:text-foreground"
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleDelete(config.id)}
-                    className="h-8 w-8 p-0 rounded-lg text-muted-foreground hover:text-red-400"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
+                {isAdmin && (
+                  <div className="flex gap-1.5">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => openEdit(config)}
+                      className="h-8 w-8 p-0 rounded-lg text-muted-foreground hover:text-foreground"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDelete(config.id)}
+                      className="h-8 w-8 p-0 rounded-lg text-muted-foreground hover:text-red-400"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                )}
               </div>
               <div className="mt-4 grid gap-3 md:grid-cols-2">
                 <div className="rounded-xl bg-black/20 border border-white/[0.04] p-3">

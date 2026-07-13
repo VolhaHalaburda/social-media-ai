@@ -33,6 +33,30 @@ export interface Video {
   starred: boolean;
 }
 
+export type Role = "admin" | "editor";
+
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+  role: Role;
+  passwordHash: string;
+  createdAt: string;
+}
+
+// What the client (and session cookie) is allowed to know about a user.
+export type SessionUser = Pick<User, "id" | "email" | "name" | "role">;
+
+export interface RunRecord {
+  id: string; // same as the pipeline job id
+  configName: string;
+  startedBy: string; // email of the user who triggered the run
+  startedAt: string;
+  status: "running" | "completed" | "error";
+  videosAnalyzed: number;
+  videosTotal: number;
+}
+
 export interface PipelineParams {
   configName: string;
   maxVideos: number;

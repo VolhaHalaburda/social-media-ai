@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/select";
 import { Plus, Pencil, Trash2, Users, Eye, Film, UserCheck, RefreshCw, Loader2, ExternalLink } from "lucide-react";
 import Link from "next/link";
+import { useSession } from "@/context/session-context";
 import type { Creator } from "@/lib/types";
 
 function formatNumber(n: number): string {
@@ -30,6 +31,7 @@ function formatNumber(n: number): string {
 }
 
 export default function CreatorsPage() {
+  const { isAdmin } = useSession();
   const [creators, setCreators] = useState<Creator[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Creator | null>(null);
@@ -171,7 +173,7 @@ export default function CreatorsPage() {
             Manage competitor Instagram accounts to track
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className={`flex gap-2 ${isAdmin ? "" : "hidden"}`}>
           <Button
             variant="ghost"
             onClick={handleRefreshAll}
@@ -293,7 +295,7 @@ export default function CreatorsPage() {
                     </Badge>
                   </div>
                 </a>
-                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className={`flex gap-1 opacity-0 transition-opacity ${isAdmin ? "group-hover:opacity-100" : ""}`}>
                   <Button
                     variant="ghost"
                     size="sm"

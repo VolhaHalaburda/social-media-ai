@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireRole } from "@/lib/auth";
 import { v4 as uuid } from "uuid";
 import { readConfigsAsync, writeConfigsAsync } from "@/lib/csv";
 import type { Config } from "@/lib/types";
@@ -9,6 +10,9 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const auth = await requireRole("admin");
+  if (auth instanceof NextResponse) return auth;
+
   const body = await request.json();
   const configs = await readConfigsAsync();
   const newConfig: Config = {
@@ -24,6 +28,9 @@ export async function POST(request: Request) {
 }
 
 export async function PUT(request: Request) {
+  const auth = await requireRole("admin");
+  if (auth instanceof NextResponse) return auth;
+
   const body = await request.json();
   const configs = await readConfigsAsync();
   const index = configs.findIndex((c) => c.id === body.id);
@@ -34,6 +41,9 @@ export async function PUT(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const auth = await requireRole("admin");
+  if (auth instanceof NextResponse) return auth;
+
   const { searchParams } = new URL(request.url);
   const id = searchParams.get("id");
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
