@@ -8,3 +8,4 @@ data/users.csv
 data/runs.csv
 .vercel
 .env*
+data/invites.csv

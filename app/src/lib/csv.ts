@@ -2,7 +2,7 @@ import { parse } from "csv-parse/sync";
 import { stringify } from "csv-stringify/sync";
 import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync } from "fs";
 import path from "path";
-import type { Config, Creator, RunRecord, User, Video } from "./types";
+import type { Config, Creator, Invite, RunRecord, User, Video } from "./types";
 
 // ---------------------------------------------------------------------------
 // Storage strategy:
@@ -188,6 +188,25 @@ export async function writeUsersAsync(users: User[]): Promise<void> {
     await kvSet("users", users);
   } else {
     writeCsvSync("users.csv", users as unknown as Record<string, unknown>[], USER_COLUMNS);
+  }
+}
+
+// ---- Invites -------------------------------------------------------------------
+
+const INVITE_COLUMNS = ["id", "role", "label", "createdBy", "createdAt", "expiresAt", "usedAt", "usedBy"];
+
+export async function readInvitesAsync(): Promise<Invite[]> {
+  if (IS_VERCEL) {
+    return (await kvGet<Invite>("invites")) ?? [];
+  }
+  return readCsvSync<Invite>("invites.csv");
+}
+
+export async function writeInvitesAsync(invites: Invite[]): Promise<void> {
+  if (IS_VERCEL) {
+    await kvSet("invites", invites);
+  } else {
+    writeCsvSync("invites.csv", invites as unknown as Record<string, unknown>[], INVITE_COLUMNS);
   }
 }
 

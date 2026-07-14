@@ -47,6 +47,17 @@ export interface User {
 // What the client (and session cookie) is allowed to know about a user.
 export type SessionUser = Pick<User, "id" | "email" | "name" | "role">;
 
+export interface Invite {
+  id: string; // the invite token — unguessable, single-use
+  role: Role;
+  label: string; // who this is for, e.g. "Rishi — eyewa" (shown to admin only)
+  createdBy: string; // admin email
+  createdAt: string;
+  expiresAt: string;
+  usedAt: string; // empty until redeemed
+  usedBy: string; // email of the account that redeemed it
+}
+
 export interface RunRecord {
   id: string; // same as the pipeline job id
   configName: string;

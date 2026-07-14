@@ -70,6 +70,7 @@ Self-contained session auth — no external provider:
 - **Worker chain**: `/api/pipeline/worker` is exempt from cookie auth; it requires `x-internal-token` (HMAC derived from `AUTH_SECRET`) sent by `triggerWorker`.
 - **Usage log**: every pipeline run is recorded (`data/runs.csv` / KV `runs`) with the email of the admin who started it; shown on `/team`.
 - **First run**: with zero users, `/login` becomes a create-admin-account form (`/api/auth/setup`), then locks.
+- **Invite links**: admins mint single-use, 7-day, revocable invite links on `/team` (`/api/invites`); the recipient opens `/invite?token=…` (public), sets name/email/password, and lands in the app with the invite's role (`/api/auth/invite`). `data/invites.csv` is gitignored — tokens are credentials.
 
 ---
 

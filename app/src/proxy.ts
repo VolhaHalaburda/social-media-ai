@@ -10,7 +10,15 @@ import { SESSION_COOKIE, verifySession } from "@/lib/session";
 // Paths reachable without a session:
 //  - /login and the auth endpoints that create a session
 //  - /api/pipeline/worker: server-to-server chain, validates x-internal-token itself
-const PUBLIC_PATHS = new Set(["/login", "/api/auth/login", "/api/auth/setup", "/api/pipeline/worker"]);
+//  - /invite + /api/auth/invite: invite links carry their own credential (the token)
+const PUBLIC_PATHS = new Set([
+  "/login",
+  "/invite",
+  "/api/auth/login",
+  "/api/auth/setup",
+  "/api/auth/invite",
+  "/api/pipeline/worker",
+]);
 
 export default async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
